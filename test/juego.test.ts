@@ -7,7 +7,6 @@ import {
   drenar,
   terminarTurno,
   type Estado,
-  type Zona,
 } from '../src/juego'
 
 function crearEstadoControlado(semilla = 123): Estado {
@@ -15,10 +14,6 @@ function crearEstadoControlado(semilla = 123): Estado {
   estado.resultado = 'enCurso'
   estado.accionesRestantes = CONFIG.accionesPorTurno
   return estado
-}
-
-function copiarTablero(estado: Estado): Zona[] {
-  return estado.zonas.map((zona) => ({ ...zona }))
 }
 
 function familiasTotales(estado: Estado): number {

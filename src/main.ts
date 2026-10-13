@@ -21,6 +21,7 @@ aplicacion.addEventListener('click', (evento: MouseEvent) => {
 
   const boton = objetivo.closest<HTMLButtonElement>('button')
   if (!boton || !aplicacion.contains(boton)) return
+  const foco = boton.dataset.foco
 
   if (boton.dataset.accion === 'nueva') {
     const semilla = new Uint32Array(1)
@@ -28,7 +29,7 @@ aplicacion.addEventListener('click', (evento: MouseEvent) => {
     estado = crearEstado(semilla[0]!)
     zonaSeleccionada = null
     mensaje = ''
-    dibujar()
+    dibujar('titulo-partida')
     return
   }
 
@@ -37,7 +38,7 @@ aplicacion.addEventListener('click', (evento: MouseEvent) => {
   if (boton.dataset.zona !== undefined) {
     zonaSeleccionada = Number(boton.dataset.zona)
     mensaje = ''
-    dibujar()
+    dibujar(foco)
     return
   }
 
@@ -45,7 +46,7 @@ aplicacion.addEventListener('click', (evento: MouseEvent) => {
     mensaje = avisar(estado, zonaSeleccionada)
       ? 'Aviso enviado. La zona está a salvo.'
       : 'No se pudo avisar esa zona.'
-    dibujar()
+    dibujar(estado.resultado === 'enCurso' ? foco : 'titulo-final')
     return
   }
 
@@ -53,26 +54,38 @@ aplicacion.addEventListener('click', (evento: MouseEvent) => {
     mensaje = drenar(estado, zonaSeleccionada)
       ? 'Drenaje abierto.'
       : 'No se pudo drenar esa zona.'
-    dibujar()
+    dibujar(estado.resultado === 'enCurso' ? foco : 'titulo-final')
     return
   }
 
   if (boton.dataset.accion === 'turno') {
-    mensaje = terminarTurno(estado)
-      ? ''
-      : 'No se pudo terminar el turno.'
+    const turnoTerminado = terminarTurno(estado)
+    mensaje = !turnoTerminado
+      ? 'No se pudo terminar el turno.'
+      : estado.resultado === 'enCurso'
+        ? `Turno ${estado.turno}. El agua subió; te quedan ${estado.accionesRestantes} acciones.`
+        : ''
     zonaSeleccionada = null
-    dibujar()
+    dibujar(
+      estado.resultado === 'enCurso' ? 'turno' : 'titulo-final',
+    )
   }
 })
 
-function dibujar(): void {
+function dibujar(foco?: string): void {
   if (!estado) {
     dibujarInicio()
   } else if (estado.resultado === 'enCurso') {
     dibujarPartida(estado)
   } else {
     dibujarFinal(estado)
+  }
+
+  if (foco) {
+    const elemento = Array.from(
+      aplicacion.querySelectorAll<HTMLElement>('[data-foco]'),
+    ).find((candidato) => candidato.dataset.foco === foco)
+    elemento?.focus()
   }
 }
 
@@ -93,7 +106,13 @@ function dibujarInicio(): void {
           En cada turno podés realizar ${CONFIG.accionesPorTurno} acciones:
           avisar para evacuar una zona o abrir un drenaje.
         </p>
-        <button class="boton boton-principal" type="button" data-accion="nueva">
+        <button
+          class="boton boton-principal"
+          type="button"
+          data-accion="nueva"
+          data-foco="nueva"
+          aria-label="Empezar una partida nueva de Tormenta"
+        >
           Empezar partida
         </button>
       </section>
@@ -115,7 +134,7 @@ function dibujarPartida(partida: Estado): void {
       <header class="encabezado encabezado-partida">
         <div>
           <p class="sobretitulo">El turno de la comunidad</p>
-          <h1>Tormenta</h1>
+          <h1 id="titulo-partida" tabindex="-1" data-foco="titulo-partida">Tormenta</h1>
         </div>
         <p class="turno">Turno <strong>${partida.turno}</strong> de ${CONFIG.turnosTotales}</p>
       </header>
@@ -125,7 +144,7 @@ function dibujarPartida(partida: Estado): void {
         <div class="dato"><span>A salvo</span><strong>${partida.familiasASalvo}</strong></div>
         <div class="dato"><span>En riesgo</span><strong>${partida.familiasEnRiesgo}</strong></div>
         <div class="dato"><span>Perdidas</span><strong>${partida.familiasPerdidas}</strong></div>
-        <div class="dato dato-meta"><span>Meta ${CONFIG.porcentajeMeta} %</span><strong>${Math.floor(partida.porcentajeSalvado)} %</strong></div>
+        <div class="dato dato-meta"><span>Meta ${CONFIG.porcentajeMeta} %</span><strong>${partida.porcentajeSalvado.toLocaleString('es', { maximumFractionDigits: 2 })} %</strong></div>
       </section>
 
       <section class="panel tablero-panel" aria-labelledby="titulo-tablero">
@@ -152,13 +171,25 @@ function dibujarPartida(partida: Estado): void {
             ? `
               <p class="seleccion">
                 Zona ${zonaElegida.fila + 1}, ${zonaElegida.columna + 1}:
-                ${zonaElegida.familias} familias, ${zonaElegida.agua} de agua.
+                ${zonaElegida.familias} familias, nivel de agua ${zonaElegida.agua}.
               </p>
               <div class="botones-accion">
-                <button class="boton boton-aviso" type="button" data-accion="avisar">
+                <button
+                  class="boton boton-aviso"
+                  type="button"
+                  data-accion="avisar"
+                  data-foco="avisar"
+                  aria-label="Avisar a las ${zonaElegida.familias} familias de la fila ${zonaElegida.fila + 1}, columna ${zonaElegida.columna + 1}"
+                >
                   Avisar
                 </button>
-                <button class="boton boton-drenaje" type="button" data-accion="drenar">
+                <button
+                  class="boton boton-drenaje"
+                  type="button"
+                  data-accion="drenar"
+                  data-foco="drenar"
+                  aria-label="Drenar la zona de la fila ${zonaElegida.fila + 1}, columna ${zonaElegida.columna + 1}, con nivel de agua ${zonaElegida.agua}"
+                >
                   Drenar
                 </button>
               </div>
@@ -166,7 +197,13 @@ function dibujarPartida(partida: Estado): void {
             : '<p class="ayuda">Elegí una zona del tablero para actuar.</p>'
         }
         <p class="mensaje" role="status" aria-live="polite">${mensaje}</p>
-        <button class="boton boton-secundario" type="button" data-accion="turno">
+        <button
+          class="boton boton-secundario"
+          type="button"
+          data-accion="turno"
+          data-foco="turno"
+          aria-label="Terminar el turno ${partida.turno}; quedan ${partida.accionesRestantes} acciones"
+        >
           Terminar turno
         </button>
       </section>
@@ -176,31 +213,42 @@ function dibujarPartida(partida: Estado): void {
 
 function dibujarZona(zona: Zona, seleccionada: boolean): string {
   const clase = claseZona(zona)
-  const estadoZona = zona.evacuada
-    ? 'evacuada'
-    : zona.inundada
-      ? 'inundada'
-      : zona.agua >= CONFIG.nivelInundacion - 2
-        ? 'a punto de inundarse'
-        : zona.agua >= 2
-          ? 'en riesgo'
-          : 'tranquila'
+  const estadoZona = estadoVisual(zona)
   const quebrada = zona.fila === CONFIG.filas - 1 ? ', quebrada' : ''
   const seleccion = seleccionada ? ' seleccionada' : ''
+  const estadoSeleccion = seleccionada ? 'seleccionada' : 'no seleccionada'
 
   return `
     <button
       class="zona ${clase}${seleccion}"
       type="button"
       data-zona="${zona.id}"
+      data-foco="zona-${zona.id}"
       aria-pressed="${seleccionada}"
-      aria-label="Fila ${zona.fila + 1}, columna ${zona.columna + 1}${quebrada}: ${zona.familias} familias, agua ${zona.agua}, ${estadoZona}"
+      aria-label="Zona de la fila ${zona.fila + 1}, columna ${zona.columna + 1}${quebrada}: ${zona.familias} familias, nivel de agua ${zona.agua}, ${estadoZona}, ${estadoSeleccion}"
     >
       <span class="zona-coordenada">${zona.fila + 1}.${zona.columna + 1}</span>
       <strong>${zona.familias} fam.</strong>
       <span>${zona.agua} agua</span>
+      <span class="zona-estado" aria-hidden="true">${simboloEstado(zona)} ${estadoZona}</span>
     </button>
   `
+}
+
+function estadoVisual(zona: Zona): string {
+  if (zona.evacuada) return 'evacuada'
+  if (zona.inundada) return 'inundada'
+  if (zona.agua >= CONFIG.nivelInundacion - 2) return 'a punto de inundarse'
+  if (zona.agua >= 2) return 'en riesgo'
+  return 'tranquila'
+}
+
+function simboloEstado(zona: Zona): string {
+  if (zona.evacuada) return '✓'
+  if (zona.inundada) return '■'
+  if (zona.agua >= CONFIG.nivelInundacion - 2) return '▲'
+  if (zona.agua >= 2) return '!'
+  return '●'
 }
 
 function claseZona(zona: Zona): string {
@@ -222,13 +270,19 @@ function dibujarFinal(partida: Estado): void {
       </header>
       <section class="panel final ${victoria ? 'final-victoria' : 'final-derrota'}">
         <p class="sobretitulo">Partida finalizada</p>
-        <h2>${victoria ? 'La comunidad está a salvo' : 'El agua ganó esta vez'}</h2>
+        <h2 id="titulo-final" tabindex="-1" data-foco="titulo-final">${victoria ? 'La comunidad está a salvo' : 'El agua ganó esta vez'}</h2>
         <p>
           ${partida.familiasASalvo} de ${partida.familiasTotales} familias
-          a salvo (${Math.floor(partida.porcentajeSalvado)} %).
+          a salvo (${partida.porcentajeSalvado.toLocaleString('es', { maximumFractionDigits: 2 })} %).
         </p>
         <p>En riesgo: ${partida.familiasEnRiesgo}. Perdidas: ${partida.familiasPerdidas}.</p>
-        <button class="boton boton-principal" type="button" data-accion="nueva">
+        <button
+          class="boton boton-principal"
+          type="button"
+          data-accion="nueva"
+          data-foco="nueva"
+          aria-label="Empezar una partida nueva de Tormenta"
+        >
           Jugar de nuevo
         </button>
       </section>
